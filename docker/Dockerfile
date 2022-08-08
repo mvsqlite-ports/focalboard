@@ -7,26 +7,33 @@ ADD webapp/ /webapp
 RUN npm install --no-optional && \
     npm run pack
 
+### mvsqlite
+FROM curlimages/curl:latest as mvsqlite
+RUN curl -L -o /tmp/libmvsqlite_preload.so https://github.com/losfair/mvsqlite/releases/download/v0.1.5/libmvsqlite_preload.so
+
 ### Go build
-FROM golang:1.18.3@sha256:b203dc573d81da7b3176264bfa447bd7c10c9347689be40540381838d75eebef AS gobuild
+FROM golang:1.18.5-bullseye AS gobuild
 
 WORKDIR /go/src/focalboard
 ADD . /go/src/focalboard
 
 
+RUN apt update && apt install -y libsqlite3-dev
 RUN  EXCLUDE_PLUGIN=true EXCLUDE_SERVER=true EXCLUDE_ENTERPRISE=true make server-linux
 RUN mkdir /data
 
 ## Final image
-FROM gcr.io/distroless/base-debian10@sha256:d2ce069a83a6407e98c7e0844f4172565f439dab683157bf93b6de20c5b46155
+FROM debian:bullseye-slim
 
 WORKDIR /opt/focalboard
 
-COPY --from=gobuild --chown=nobody:nobody /data /data
-COPY --from=nodebuild --chown=nobody:nobody /webapp/pack pack/
-COPY --from=gobuild --chown=nobody:nobody /go/src/focalboard/bin/linux/focalboard-server bin/
-COPY --from=gobuild --chown=nobody:nobody /go/src/focalboard/LICENSE.txt LICENSE.txt
-COPY --from=gobuild --chown=nobody:nobody /go/src/focalboard/docker/server_config.json config.json
+COPY --from=gobuild --chown=nobody:nogroup /data /data
+COPY --from=nodebuild --chown=nobody:nogroup /webapp/pack pack/
+COPY --from=gobuild --chown=nobody:nogroup /go/src/focalboard/bin/linux/focalboard-server bin/
+COPY --from=gobuild --chown=nobody:nogroup /go/src/focalboard/LICENSE.txt LICENSE.txt
+COPY --from=gobuild --chown=nobody:nogroup /go/src/focalboard/docker/server_config.json config.json
+COPY --from=mvsqlite /tmp/libmvsqlite_preload.so /
+RUN apt update && apt install -y libsqlite3-0 libssl1.1 ca-certificates
 
 USER nobody
 
@@ -36,4 +43,5 @@ EXPOSE 8000/tcp 9092/tcp
 
 VOLUME /data
 
+ENV LD_PRELOAD=/libmvsqlite_preload.so
 CMD ["/opt/focalboard/bin/focalboard-server"]
