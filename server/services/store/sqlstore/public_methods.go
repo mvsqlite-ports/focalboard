@@ -26,7 +26,7 @@ func (s *SQLStore) AddUpdateCategoryBoard(userID string, categoryID string, bloc
 	if s.dbType == model.SqliteDBType {
 		return s.addUpdateCategoryBoard(s.db, userID, categoryID, blockID)
 	}
-	tx, txErr := s.db.BeginTx(context.Background(), nil)
+	tx, txErr := s.BeginImmTx(context.Background(), nil)
 	if txErr != nil {
 		return txErr
 	}
@@ -55,7 +55,7 @@ func (s *SQLStore) CreateBoardsAndBlocks(bab *model.BoardsAndBlocks, userID stri
 	if s.dbType == model.SqliteDBType {
 		return s.createBoardsAndBlocks(s.db, bab, userID)
 	}
-	tx, txErr := s.db.BeginTx(context.Background(), nil)
+	tx, txErr := s.BeginImmTx(context.Background(), nil)
 	if txErr != nil {
 		return nil, txErr
 	}
@@ -79,7 +79,7 @@ func (s *SQLStore) CreateBoardsAndBlocksWithAdmin(bab *model.BoardsAndBlocks, us
 	if s.dbType == model.SqliteDBType {
 		return s.createBoardsAndBlocksWithAdmin(s.db, bab, userID)
 	}
-	tx, txErr := s.db.BeginTx(context.Background(), nil)
+	tx, txErr := s.BeginImmTx(context.Background(), nil)
 	if txErr != nil {
 		return nil, nil, txErr
 	}
@@ -123,7 +123,7 @@ func (s *SQLStore) DeleteBlock(blockID string, modifiedBy string) error {
 	if s.dbType == model.SqliteDBType {
 		return s.deleteBlock(s.db, blockID, modifiedBy)
 	}
-	tx, txErr := s.db.BeginTx(context.Background(), nil)
+	tx, txErr := s.BeginImmTx(context.Background(), nil)
 	if txErr != nil {
 		return txErr
 	}
@@ -147,7 +147,7 @@ func (s *SQLStore) DeleteBoard(boardID string, userID string) error {
 	if s.dbType == model.SqliteDBType {
 		return s.deleteBoard(s.db, boardID, userID)
 	}
-	tx, txErr := s.db.BeginTx(context.Background(), nil)
+	tx, txErr := s.BeginImmTx(context.Background(), nil)
 	if txErr != nil {
 		return txErr
 	}
@@ -171,7 +171,7 @@ func (s *SQLStore) DeleteBoardsAndBlocks(dbab *model.DeleteBoardsAndBlocks, user
 	if s.dbType == model.SqliteDBType {
 		return s.deleteBoardsAndBlocks(s.db, dbab, userID)
 	}
-	tx, txErr := s.db.BeginTx(context.Background(), nil)
+	tx, txErr := s.BeginImmTx(context.Background(), nil)
 	if txErr != nil {
 		return txErr
 	}
@@ -220,7 +220,7 @@ func (s *SQLStore) DuplicateBlock(boardID string, blockID string, userID string,
 	if s.dbType == model.SqliteDBType {
 		return s.duplicateBlock(s.db, boardID, blockID, userID, asTemplate)
 	}
-	tx, txErr := s.db.BeginTx(context.Background(), nil)
+	tx, txErr := s.BeginImmTx(context.Background(), nil)
 	if txErr != nil {
 		return nil, txErr
 	}
@@ -244,7 +244,7 @@ func (s *SQLStore) DuplicateBoard(boardID string, userID string, toTeam string, 
 	if s.dbType == model.SqliteDBType {
 		return s.duplicateBoard(s.db, boardID, userID, toTeam, asTemplate)
 	}
-	tx, txErr := s.db.BeginTx(context.Background(), nil)
+	tx, txErr := s.BeginImmTx(context.Background(), nil)
 	if txErr != nil {
 		return nil, nil, txErr
 	}
@@ -538,7 +538,7 @@ func (s *SQLStore) InsertBlock(block *model.Block, userID string) error {
 	if s.dbType == model.SqliteDBType {
 		return s.insertBlock(s.db, block, userID)
 	}
-	tx, txErr := s.db.BeginTx(context.Background(), nil)
+	tx, txErr := s.BeginImmTx(context.Background(), nil)
 	if txErr != nil {
 		return txErr
 	}
@@ -562,7 +562,7 @@ func (s *SQLStore) InsertBlocks(blocks []model.Block, userID string) error {
 	if s.dbType == model.SqliteDBType {
 		return s.insertBlocks(s.db, blocks, userID)
 	}
-	tx, txErr := s.db.BeginTx(context.Background(), nil)
+	tx, txErr := s.BeginImmTx(context.Background(), nil)
 	if txErr != nil {
 		return txErr
 	}
@@ -591,7 +591,7 @@ func (s *SQLStore) InsertBoardWithAdmin(board *model.Board, userID string) (*mod
 	if s.dbType == model.SqliteDBType {
 		return s.insertBoardWithAdmin(s.db, board, userID)
 	}
-	tx, txErr := s.db.BeginTx(context.Background(), nil)
+	tx, txErr := s.BeginImmTx(context.Background(), nil)
 	if txErr != nil {
 		return nil, nil, txErr
 	}
@@ -615,7 +615,7 @@ func (s *SQLStore) PatchBlock(blockID string, blockPatch *model.BlockPatch, user
 	if s.dbType == model.SqliteDBType {
 		return s.patchBlock(s.db, blockID, blockPatch, userID)
 	}
-	tx, txErr := s.db.BeginTx(context.Background(), nil)
+	tx, txErr := s.BeginImmTx(context.Background(), nil)
 	if txErr != nil {
 		return txErr
 	}
@@ -639,7 +639,7 @@ func (s *SQLStore) PatchBlocks(blockPatches *model.BlockPatchBatch, userID strin
 	if s.dbType == model.SqliteDBType {
 		return s.patchBlocks(s.db, blockPatches, userID)
 	}
-	tx, txErr := s.db.BeginTx(context.Background(), nil)
+	tx, txErr := s.BeginImmTx(context.Background(), nil)
 	if txErr != nil {
 		return txErr
 	}
@@ -663,7 +663,7 @@ func (s *SQLStore) PatchBoard(boardID string, boardPatch *model.BoardPatch, user
 	if s.dbType == model.SqliteDBType {
 		return s.patchBoard(s.db, boardID, boardPatch, userID)
 	}
-	tx, txErr := s.db.BeginTx(context.Background(), nil)
+	tx, txErr := s.BeginImmTx(context.Background(), nil)
 	if txErr != nil {
 		return nil, txErr
 	}
@@ -687,7 +687,7 @@ func (s *SQLStore) PatchBoardsAndBlocks(pbab *model.PatchBoardsAndBlocks, userID
 	if s.dbType == model.SqliteDBType {
 		return s.patchBoardsAndBlocks(s.db, pbab, userID)
 	}
-	tx, txErr := s.db.BeginTx(context.Background(), nil)
+	tx, txErr := s.BeginImmTx(context.Background(), nil)
 	if txErr != nil {
 		return nil, txErr
 	}
@@ -726,7 +726,7 @@ func (s *SQLStore) RunDataRetention(globalRetentionDate int64, batchSize int64) 
 	if s.dbType == model.SqliteDBType {
 		return s.runDataRetention(s.db, globalRetentionDate, batchSize)
 	}
-	tx, txErr := s.db.BeginTx(context.Background(), nil)
+	tx, txErr := s.BeginImmTx(context.Background(), nil)
 	if txErr != nil {
 		return 0, txErr
 	}
@@ -790,7 +790,7 @@ func (s *SQLStore) UndeleteBlock(blockID string, modifiedBy string) error {
 	if s.dbType == model.SqliteDBType {
 		return s.undeleteBlock(s.db, blockID, modifiedBy)
 	}
-	tx, txErr := s.db.BeginTx(context.Background(), nil)
+	tx, txErr := s.BeginImmTx(context.Background(), nil)
 	if txErr != nil {
 		return txErr
 	}
@@ -814,7 +814,7 @@ func (s *SQLStore) UndeleteBoard(boardID string, modifiedBy string) error {
 	if s.dbType == model.SqliteDBType {
 		return s.undeleteBoard(s.db, boardID, modifiedBy)
 	}
-	tx, txErr := s.db.BeginTx(context.Background(), nil)
+	tx, txErr := s.BeginImmTx(context.Background(), nil)
 	if txErr != nil {
 		return txErr
 	}

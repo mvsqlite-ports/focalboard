@@ -11,6 +11,7 @@ import (
 	"github.com/mattermost/focalboard/server/services/store"
 	"github.com/mattermost/mattermost-plugin-api/cluster"
 
+	"context"
 	mmModel "github.com/mattermost/mattermost-server/v6/model"
 	"github.com/mattermost/mattermost-server/v6/shared/mlog"
 )
@@ -93,6 +94,14 @@ func (s *SQLStore) Shutdown() error {
 // raw SQL queries.
 func (s *SQLStore) DBHandle() *sql.DB {
 	return s.db
+}
+
+func (s *SQLStore) BeginImmTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error) {
+	tx, err := s.db.BeginTx(ctx, opts)
+	if err == nil {
+		_, err = tx.Exec("ROLLBACK; BEGIN IMMEDIATE")
+	}
+	return tx, err
 }
 
 // DBType returns the DB driver used for the store.

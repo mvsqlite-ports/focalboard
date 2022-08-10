@@ -77,7 +77,7 @@ func (s *SQLStore) runUniqueIDsMigration() error {
 
 	s.logger.Debug("Running Unique IDs migration")
 
-	tx, txErr := s.db.BeginTx(context.Background(), nil)
+	tx, txErr := s.BeginImmTx(context.Background(), nil)
 	if txErr != nil {
 		return txErr
 	}
@@ -144,7 +144,7 @@ func (s *SQLStore) runCategoryUUIDIDMigration() error {
 
 	s.logger.Debug("Running category UUID ID migration")
 
-	tx, txErr := s.db.BeginTx(context.Background(), nil)
+	tx, txErr := s.BeginImmTx(context.Background(), nil)
 	if txErr != nil {
 		return txErr
 	}
@@ -374,7 +374,7 @@ func (s *SQLStore) migrateTeamLessBoards() error {
 	// duplicate queries for the same DM.
 	channelToTeamCache := map[string]string{}
 
-	tx, err := s.db.BeginTx(context.Background(), nil)
+	tx, err := s.BeginImmTx(context.Background(), nil)
 	if err != nil {
 		s.logger.Error("error starting transaction in migrateTeamLessBoards", mlog.Err(err))
 		return err

@@ -12,5 +12,6 @@
   "session_refresh_time": 18000,
   "localOnly": false,
   "enableLocalMode": true,
-  "localModeSocketLocation": "/var/tmp/focalboard_local.socket"
+  "localModeSocketLocation": "/var/tmp/focalboard_local.socket",
+  "enablePublicSharedBoards": true
 }
