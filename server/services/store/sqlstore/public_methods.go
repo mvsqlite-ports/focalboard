@@ -14,230 +14,194 @@ package sqlstore
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/mattermost/focalboard/server/model"
 
 	mmModel "github.com/mattermost/mattermost-server/v6/model"
-	"github.com/mattermost/mattermost-server/v6/shared/mlog"
 )
 
 func (s *SQLStore) AddUpdateCategoryBoard(userID string, categoryID string, blockID string) error {
-	tx, txErr := s.BeginImmTx(context.Background(), nil)
-	if txErr != nil {
-		return txErr
-	}
-	err := s.addUpdateCategoryBoard(tx, userID, categoryID, blockID)
-	if err != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			s.logger.Error("transaction rollback error", mlog.Err(rollbackErr), mlog.String("methodName", "AddUpdateCategoryBoard"))
-		}
-		return err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-
-	return nil
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		return s.addUpdateCategoryBoard(tx, userID, categoryID, blockID)
+	})
 
 }
 
 func (s *SQLStore) CleanUpSessions(expireTime int64) error {
-	return s.cleanUpSessions(s.db, expireTime)
-
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		return s.cleanUpSessions(s.db, expireTime)
+	})
 }
 
 func (s *SQLStore) CreateBoardsAndBlocks(bab *model.BoardsAndBlocks, userID string) (*model.BoardsAndBlocks, error) {
-	tx, txErr := s.BeginImmTx(context.Background(), nil)
-	if txErr != nil {
-		return nil, txErr
-	}
-	result, err := s.createBoardsAndBlocks(tx, bab, userID)
-	if err != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			s.logger.Error("transaction rollback error", mlog.Err(rollbackErr), mlog.String("methodName", "CreateBoardsAndBlocks"))
+	result, _, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*model.BoardsAndBlocks, error) {
+		result, err := s.createBoardsAndBlocks(tx, bab, userID)
+		if err != nil {
+			return nil, err
 		}
-		return nil, err
-	}
+		return result, nil
+	})
 
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-
-	return result, nil
-
+	return result, err
 }
 
 func (s *SQLStore) CreateBoardsAndBlocksWithAdmin(bab *model.BoardsAndBlocks, userID string) (*model.BoardsAndBlocks, []*model.BoardMember, error) {
-	tx, txErr := s.BeginImmTx(context.Background(), nil)
-	if txErr != nil {
-		return nil, nil, txErr
-	}
-	result, resultVar1, err := s.createBoardsAndBlocksWithAdmin(tx, bab, userID)
-	if err != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			s.logger.Error("transaction rollback error", mlog.Err(rollbackErr), mlog.String("methodName", "CreateBoardsAndBlocksWithAdmin"))
+	result, _, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*struct {
+		a *model.BoardsAndBlocks
+		b []*model.BoardMember
+	}, error) {
+		result, resultVar1, err := s.createBoardsAndBlocksWithAdmin(tx, bab, userID)
+		if err != nil {
+			return nil, err
 		}
+		return &struct {
+			a *model.BoardsAndBlocks
+			b []*model.BoardMember
+		}{a: result, b: resultVar1}, nil
+	})
+
+	if err != nil {
 		return nil, nil, err
 	}
 
-	if err := tx.Commit(); err != nil {
-		return nil, nil, err
-	}
-
-	return result, resultVar1, nil
+	return result.a, result.b, nil
 
 }
 
 func (s *SQLStore) CreateCategory(category model.Category) error {
-	return s.createCategory(s.db, category)
-
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		return s.createCategory(s.db, category)
+	})
 }
 
 func (s *SQLStore) CreateSession(session *model.Session) error {
-	return s.createSession(s.db, session)
-
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		return s.createSession(s.db, session)
+	})
 }
 
 func (s *SQLStore) CreateSubscription(sub *model.Subscription) (*model.Subscription, error) {
-	return s.createSubscription(s.db, sub)
+	result, _, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*model.Subscription, error) {
+		return s.createSubscription(s.db, sub)
+	})
+	return result, err
 
 }
 
 func (s *SQLStore) CreateUser(user *model.User) error {
-	return s.createUser(s.db, user)
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		return s.createUser(s.db, user)
+	})
 
 }
 
 func (s *SQLStore) DeleteBlock(blockID string, modifiedBy string) error {
-	tx, txErr := s.BeginImmTx(context.Background(), nil)
-	if txErr != nil {
-		return txErr
-	}
-	err := s.deleteBlock(tx, blockID, modifiedBy)
-	if err != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			s.logger.Error("transaction rollback error", mlog.Err(rollbackErr), mlog.String("methodName", "DeleteBlock"))
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		err := s.deleteBlock(tx, blockID, modifiedBy)
+		if err != nil {
+			return err
 		}
-		return err
-	}
 
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-
-	return nil
+		return nil
+	})
 
 }
 
 func (s *SQLStore) DeleteBoard(boardID string, userID string) error {
-	tx, txErr := s.BeginImmTx(context.Background(), nil)
-	if txErr != nil {
-		return txErr
-	}
-	err := s.deleteBoard(tx, boardID, userID)
-	if err != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			s.logger.Error("transaction rollback error", mlog.Err(rollbackErr), mlog.String("methodName", "DeleteBoard"))
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		err := s.deleteBoard(tx, boardID, userID)
+		if err != nil {
+			return err
 		}
-		return err
-	}
 
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-
-	return nil
+		return nil
+	})
 
 }
 
 func (s *SQLStore) DeleteBoardsAndBlocks(dbab *model.DeleteBoardsAndBlocks, userID string) error {
-	tx, txErr := s.BeginImmTx(context.Background(), nil)
-	if txErr != nil {
-		return txErr
-	}
-	err := s.deleteBoardsAndBlocks(tx, dbab, userID)
-	if err != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			s.logger.Error("transaction rollback error", mlog.Err(rollbackErr), mlog.String("methodName", "DeleteBoardsAndBlocks"))
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		err := s.deleteBoardsAndBlocks(tx, dbab, userID)
+		if err != nil {
+			return err
 		}
-		return err
-	}
 
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-
-	return nil
+		return nil
+	})
 
 }
 
 func (s *SQLStore) DeleteCategory(categoryID string, userID string, teamID string) error {
-	return s.deleteCategory(s.db, categoryID, userID, teamID)
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		return s.deleteCategory(s.db, categoryID, userID, teamID)
+	})
 
 }
 
 func (s *SQLStore) DeleteMember(boardID string, userID string) error {
-	return s.deleteMember(s.db, boardID, userID)
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		return s.deleteMember(s.db, boardID, userID)
+	})
 
 }
 
 func (s *SQLStore) DeleteNotificationHint(blockID string) error {
-	return s.deleteNotificationHint(s.db, blockID)
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		return s.deleteNotificationHint(s.db, blockID)
+	})
 
 }
 
 func (s *SQLStore) DeleteSession(sessionID string) error {
-	return s.deleteSession(s.db, sessionID)
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		return s.deleteSession(s.db, sessionID)
+	})
 
 }
 
 func (s *SQLStore) DeleteSubscription(blockID string, subscriberID string) error {
-	return s.deleteSubscription(s.db, blockID, subscriberID)
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		return s.deleteSubscription(s.db, blockID, subscriberID)
+	})
 
 }
 
 func (s *SQLStore) DuplicateBlock(boardID string, blockID string, userID string, asTemplate bool) ([]model.Block, error) {
-	tx, txErr := s.BeginImmTx(context.Background(), nil)
-	if txErr != nil {
-		return nil, txErr
-	}
-	result, err := s.duplicateBlock(tx, boardID, blockID, userID, asTemplate)
-	if err != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			s.logger.Error("transaction rollback error", mlog.Err(rollbackErr), mlog.String("methodName", "DuplicateBlock"))
+	result, _, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*[]model.Block, error) {
+		result, err := s.duplicateBlock(tx, boardID, blockID, userID, asTemplate)
+		if err != nil {
+			return nil, err
 		}
-		return nil, err
-	}
 
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-
-	return result, nil
+		return &result, nil
+	})
+	return *result, err
 
 }
 
 func (s *SQLStore) DuplicateBoard(boardID string, userID string, toTeam string, asTemplate bool) (*model.BoardsAndBlocks, []*model.BoardMember, error) {
-	tx, txErr := s.BeginImmTx(context.Background(), nil)
-	if txErr != nil {
-		return nil, nil, txErr
-	}
-	result, resultVar1, err := s.duplicateBoard(tx, boardID, userID, toTeam, asTemplate)
-	if err != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			s.logger.Error("transaction rollback error", mlog.Err(rollbackErr), mlog.String("methodName", "DuplicateBoard"))
+	result, _, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*struct {
+		a *model.BoardsAndBlocks
+		b []*model.BoardMember
+	}, error) {
+		result, resultVar1, err := s.duplicateBoard(tx, boardID, userID, toTeam, asTemplate)
+		if err != nil {
+			return nil, err
 		}
+
+		return &struct {
+			a *model.BoardsAndBlocks
+			b []*model.BoardMember
+		}{a: result, b: resultVar1}, nil
+	})
+
+	if err != nil {
 		return nil, nil, err
 	}
 
-	if err := tx.Commit(); err != nil {
-		return nil, nil, err
-	}
-
-	return result, resultVar1, nil
-
+	return result.a, result.b, nil
 }
 
 func (s *SQLStore) GetActiveUserCount(updatedSecondsAgo int64) (int, error) {
@@ -511,200 +475,156 @@ func (s *SQLStore) GetUsersList(userIDs []string) ([]*model.User, error) {
 }
 
 func (s *SQLStore) InsertBlock(block *model.Block, userID string) error {
-	tx, txErr := s.BeginImmTx(context.Background(), nil)
-	if txErr != nil {
-		return txErr
-	}
-	err := s.insertBlock(tx, block, userID)
-	if err != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			s.logger.Error("transaction rollback error", mlog.Err(rollbackErr), mlog.String("methodName", "InsertBlock"))
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		err := s.insertBlock(tx, block, userID)
+		if err != nil {
+			return err
 		}
-		return err
-	}
 
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-
-	return nil
+		return nil
+	})
 
 }
 
 func (s *SQLStore) InsertBlocks(blocks []model.Block, userID string) error {
-	tx, txErr := s.BeginImmTx(context.Background(), nil)
-	if txErr != nil {
-		return txErr
-	}
-	err := s.insertBlocks(tx, blocks, userID)
-	if err != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			s.logger.Error("transaction rollback error", mlog.Err(rollbackErr), mlog.String("methodName", "InsertBlocks"))
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		err := s.insertBlocks(tx, blocks, userID)
+		if err != nil {
+			return err
 		}
-		return err
-	}
 
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-
-	return nil
+		return nil
+	})
 
 }
 
 func (s *SQLStore) InsertBoard(board *model.Board, userID string) (*model.Board, error) {
-	return s.insertBoard(s.db, board, userID)
+	result, _, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*model.Board, error) {
+		return s.insertBoard(s.db, board, userID)
+	})
+	return result, err
 
 }
 
 func (s *SQLStore) InsertBoardWithAdmin(board *model.Board, userID string) (*model.Board, *model.BoardMember, error) {
-	tx, txErr := s.BeginImmTx(context.Background(), nil)
-	if txErr != nil {
-		return nil, nil, txErr
-	}
-	result, resultVar1, err := s.insertBoardWithAdmin(tx, board, userID)
-	if err != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			s.logger.Error("transaction rollback error", mlog.Err(rollbackErr), mlog.String("methodName", "InsertBoardWithAdmin"))
+	result, _, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*struct {
+		a *model.Board
+		b *model.BoardMember
+	}, error) {
+		result, resultVar1, err := s.insertBoardWithAdmin(tx, board, userID)
+		if err != nil {
+			return nil, err
 		}
+
+		return &struct {
+			a *model.Board
+			b *model.BoardMember
+		}{
+			a: result, b: resultVar1,
+		}, nil
+	})
+	if err != nil {
 		return nil, nil, err
 	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, nil, err
-	}
-
-	return result, resultVar1, nil
-
+	return result.a, result.b, nil
 }
 
 func (s *SQLStore) PatchBlock(blockID string, blockPatch *model.BlockPatch, userID string) error {
-	tx, txErr := s.BeginImmTx(context.Background(), nil)
-	if txErr != nil {
-		return txErr
-	}
-	err := s.patchBlock(tx, blockID, blockPatch, userID)
-	if err != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			s.logger.Error("transaction rollback error", mlog.Err(rollbackErr), mlog.String("methodName", "PatchBlock"))
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		err := s.patchBlock(tx, blockID, blockPatch, userID)
+		if err != nil {
+			return err
 		}
-		return err
-	}
 
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-
-	return nil
+		return nil
+	})
 
 }
 
 func (s *SQLStore) PatchBlocks(blockPatches *model.BlockPatchBatch, userID string) error {
-	tx, txErr := s.BeginImmTx(context.Background(), nil)
-	if txErr != nil {
-		return txErr
-	}
-	err := s.patchBlocks(tx, blockPatches, userID)
-	if err != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			s.logger.Error("transaction rollback error", mlog.Err(rollbackErr), mlog.String("methodName", "PatchBlocks"))
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		err := s.patchBlocks(tx, blockPatches, userID)
+		if err != nil {
+			return err
 		}
-		return err
-	}
 
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-
-	return nil
+		return nil
+	})
 
 }
 
 func (s *SQLStore) PatchBoard(boardID string, boardPatch *model.BoardPatch, userID string) (*model.Board, error) {
-	tx, txErr := s.BeginImmTx(context.Background(), nil)
-	if txErr != nil {
-		return nil, txErr
-	}
-	result, err := s.patchBoard(tx, boardID, boardPatch, userID)
-	if err != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			s.logger.Error("transaction rollback error", mlog.Err(rollbackErr), mlog.String("methodName", "PatchBoard"))
+	result, _, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*model.Board, error) {
+		result, err := s.patchBoard(tx, boardID, boardPatch, userID)
+		if err != nil {
+			return nil, err
 		}
-		return nil, err
-	}
+		return result, nil
+	})
 
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-
-	return result, nil
-
+	return result, err
 }
 
 func (s *SQLStore) PatchBoardsAndBlocks(pbab *model.PatchBoardsAndBlocks, userID string) (*model.BoardsAndBlocks, error) {
-	tx, txErr := s.BeginImmTx(context.Background(), nil)
-	if txErr != nil {
-		return nil, txErr
-	}
-	result, err := s.patchBoardsAndBlocks(tx, pbab, userID)
-	if err != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			s.logger.Error("transaction rollback error", mlog.Err(rollbackErr), mlog.String("methodName", "PatchBoardsAndBlocks"))
+	result, _, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*model.BoardsAndBlocks, error) {
+		result, err := s.patchBoardsAndBlocks(tx, pbab, userID)
+		if err != nil {
+			return nil, err
 		}
-		return nil, err
-	}
 
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-
-	return result, nil
-
+		return result, nil
+	})
+	return result, err
 }
 
 func (s *SQLStore) PatchUserProps(userID string, patch model.UserPropPatch) error {
-	return s.patchUserProps(s.db, userID, patch)
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		return s.patchUserProps(s.db, userID, patch)
+	})
 
 }
 
 func (s *SQLStore) RefreshSession(session *model.Session) error {
-	return s.refreshSession(s.db, session)
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		return s.refreshSession(s.db, session)
+	})
 
 }
 
 func (s *SQLStore) RemoveDefaultTemplates(boards []*model.Board) error {
-	return s.removeDefaultTemplates(s.db, boards)
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		return s.removeDefaultTemplates(s.db, boards)
+	})
 
 }
 
 func (s *SQLStore) RunDataRetention(globalRetentionDate int64, batchSize int64) (int64, error) {
-	tx, txErr := s.BeginImmTx(context.Background(), nil)
-	if txErr != nil {
-		return 0, txErr
-	}
-	result, err := s.runDataRetention(tx, globalRetentionDate, batchSize)
-	if err != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			s.logger.Error("transaction rollback error", mlog.Err(rollbackErr), mlog.String("methodName", "RunDataRetention"))
+	result, _, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*int64, error) {
+		result, err := s.runDataRetention(tx, globalRetentionDate, batchSize)
+		if err != nil {
+			return nil, err
 		}
+
+		return &result, nil
+	})
+	if err != nil {
 		return 0, err
 	}
-
-	if err := tx.Commit(); err != nil {
-		return 0, err
-	}
-
-	return result, nil
+	return *result, nil
 
 }
 
 func (s *SQLStore) SaveFileInfo(fileInfo *mmModel.FileInfo) error {
-	return s.saveFileInfo(s.db, fileInfo)
-
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		return s.saveFileInfo(s.db, fileInfo)
+	})
 }
 
 func (s *SQLStore) SaveMember(bm *model.BoardMember) (*model.BoardMember, error) {
-	return s.saveMember(s.db, bm)
+	result, _, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*model.BoardMember, error) {
+		return s.saveMember(s.db, bm)
+	})
+	return result, err
 
 }
 
@@ -734,103 +654,116 @@ func (s *SQLStore) SendMessage(message string, postType string, receipts []strin
 }
 
 func (s *SQLStore) SetSystemSetting(key string, value string) error {
-	return s.setSystemSetting(s.db, key, value)
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		return s.setSystemSetting(s.db, key, value)
+	})
 
 }
 
 func (s *SQLStore) UndeleteBlock(blockID string, modifiedBy string) error {
-	tx, txErr := s.BeginImmTx(context.Background(), nil)
-	if txErr != nil {
-		return txErr
-	}
-	err := s.undeleteBlock(tx, blockID, modifiedBy)
-	if err != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			s.logger.Error("transaction rollback error", mlog.Err(rollbackErr), mlog.String("methodName", "UndeleteBlock"))
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		err := s.undeleteBlock(tx, blockID, modifiedBy)
+		if err != nil {
+			return err
 		}
-		return err
-	}
 
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-
-	return nil
+		return nil
+	})
 
 }
 
 func (s *SQLStore) UndeleteBoard(boardID string, modifiedBy string) error {
-	tx, txErr := s.BeginImmTx(context.Background(), nil)
-	if txErr != nil {
-		return txErr
-	}
-	err := s.undeleteBoard(tx, boardID, modifiedBy)
-	if err != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			s.logger.Error("transaction rollback error", mlog.Err(rollbackErr), mlog.String("methodName", "UndeleteBoard"))
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		err := s.undeleteBoard(tx, boardID, modifiedBy)
+		if err != nil {
+			return err
 		}
-		return err
-	}
 
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-
-	return nil
+		return nil
+	})
 
 }
 
 func (s *SQLStore) UpdateCardLimitTimestamp(cardLimit int) (int64, error) {
-	return s.updateCardLimitTimestamp(s.db, cardLimit)
+	result, _, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*int64, error) {
+		result, err := s.updateCardLimitTimestamp(s.db, cardLimit)
+		if err != nil {
+			return nil, err
+		}
+
+		return &result, nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return *result, nil
 
 }
 
 func (s *SQLStore) UpdateCategory(category model.Category) error {
-	return s.updateCategory(s.db, category)
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		return s.updateCategory(s.db, category)
+	})
 
 }
 
 func (s *SQLStore) UpdateSession(session *model.Session) error {
-	return s.updateSession(s.db, session)
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		return s.updateSession(s.db, session)
+	})
 
 }
 
 func (s *SQLStore) UpdateSubscribersNotifiedAt(blockID string, notifiedAt int64) error {
-	return s.updateSubscribersNotifiedAt(s.db, blockID, notifiedAt)
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		return s.updateSubscribersNotifiedAt(s.db, blockID, notifiedAt)
+	})
 
 }
 
 func (s *SQLStore) UpdateUser(user *model.User) error {
-	return s.updateUser(s.db, user)
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		return s.updateUser(s.db, user)
+	})
 
 }
 
 func (s *SQLStore) UpdateUserPassword(username string, password string) error {
-	return s.updateUserPassword(s.db, username, password)
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		return s.updateUserPassword(s.db, username, password)
+	})
 
 }
 
 func (s *SQLStore) UpdateUserPasswordByID(userID string, password string) error {
-	return s.updateUserPasswordByID(s.db, userID, password)
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		return s.updateUserPasswordByID(s.db, userID, password)
+	})
 
 }
 
 func (s *SQLStore) UpsertNotificationHint(hint *model.NotificationHint, notificationFreq time.Duration) (*model.NotificationHint, error) {
-	return s.upsertNotificationHint(s.db, hint, notificationFreq)
+	result, _, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*model.NotificationHint, error) {
+		return s.upsertNotificationHint(s.db, hint, notificationFreq)
+	})
+	return result, err
 
 }
 
 func (s *SQLStore) UpsertSharing(sharing model.Sharing) error {
-	return s.upsertSharing(s.db, sharing)
-
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		return s.upsertSharing(s.db, sharing)
+	})
 }
 
 func (s *SQLStore) UpsertTeamSettings(team model.Team) error {
-	return s.upsertTeamSettings(s.db, team)
-
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		return s.upsertTeamSettings(s.db, team)
+	})
 }
 
 func (s *SQLStore) UpsertTeamSignupToken(team model.Team) error {
-	return s.upsertTeamSignupToken(s.db, team)
-
+	return SimpleOptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) error {
+		return s.upsertTeamSignupToken(s.db, team)
+	})
 }

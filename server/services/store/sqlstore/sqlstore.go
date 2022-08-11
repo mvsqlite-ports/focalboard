@@ -1,9 +1,14 @@
 package sqlstore
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"errors"
 	"fmt"
+	"math/big"
 	"net/url"
+	"runtime"
+	"time"
 
 	sq "github.com/Masterminds/squirrel"
 
@@ -12,6 +17,7 @@ import (
 	"github.com/mattermost/mattermost-plugin-api/cluster"
 
 	"context"
+
 	mmModel "github.com/mattermost/mattermost-server/v6/model"
 	"github.com/mattermost/mattermost-server/v6/shared/mlog"
 )
@@ -94,6 +100,95 @@ func (s *SQLStore) Shutdown() error {
 // raw SQL queries.
 func (s *SQLStore) DBHandle() *sql.DB {
 	return s.db
+}
+
+var ConflictError = errors.New("conflict")
+
+func SimpleOptimisticRetryableImmTx(s *SQLStore, ctx context.Context, f func(tx *sql.Tx) error) error {
+	_, _, err := OptimisticRetryableImmTx(s, ctx, func(tx *sql.Tx) (*struct{}, error) {
+		return nil, f(tx)
+	})
+	return err
+}
+
+func OptimisticRetryableImmTx[R any](s *SQLStore, ctx context.Context, f func(tx *sql.Tx) (*R, error)) (*R, string, error) {
+	for {
+		r, version, err := OptimisticImmTx(s, ctx, f)
+		if err == nil {
+			return r, version, nil
+		}
+		if err != ConflictError {
+			return nil, "", err
+		}
+
+		s.logger.Info("retryTx", mlog.Err(err))
+
+		durMs, err := rand.Int(rand.Reader, big.NewInt(500))
+		if err != nil {
+			return nil, "", err
+		}
+		timer := time.NewTimer(time.Duration(durMs.Int64()+100) * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, "", ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+func OptimisticImmTx[R any](s *SQLStore, ctx context.Context, f func(tx *sql.Tx) (*R, error)) (*R, string, error) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	_, err := s.db.Exec("select mv_commitgroup_begin(); select mv_commitgroup_lock_disable()")
+	if err != nil {
+		return nil, "", err
+	}
+	rollback := true
+	defer func() {
+		if rollback {
+			_, err := s.db.Exec("select mv_commitgroup_rollback()")
+			if err != nil {
+				panic(err)
+			}
+		}
+	}()
+
+	txn, err := s.BeginImmTx(ctx, nil)
+	if err != nil {
+		return nil, "", err
+	}
+
+	r, err := f(txn)
+	if err != nil {
+		if err := txn.Rollback(); err != nil {
+			s.logger.Error("failed to rollback transaction", mlog.Err(err))
+		}
+		return nil, "", err
+	}
+
+	if err := txn.Commit(); err != nil {
+		return nil, "", err
+	}
+
+	rollback = false
+	row := s.db.QueryRow("select mv_commitgroup_commit()")
+	var maybeVersion sql.NullString
+	err = row.Scan(&maybeVersion)
+	if err != nil {
+		panic(err) // We can't recover from this.
+	}
+
+	if !maybeVersion.Valid {
+		// nothing changed
+		return r, "", nil
+	}
+
+	if maybeVersion.String == "conflict" {
+		return nil, "", ConflictError
+	}
+	return r, maybeVersion.String, nil
 }
 
 func (s *SQLStore) BeginImmTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error) {

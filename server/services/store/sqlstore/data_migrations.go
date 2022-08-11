@@ -2,6 +2,7 @@ package sqlstore
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strconv"
 
@@ -77,54 +78,40 @@ func (s *SQLStore) runUniqueIDsMigration() error {
 
 	s.logger.Debug("Running Unique IDs migration")
 
-	tx, txErr := s.BeginImmTx(context.Background(), nil)
-	if txErr != nil {
-		return txErr
-	}
-
-	blocks, err := s.getBlocksWithSameID(tx)
-	if err != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			s.logger.Error("Unique IDs transaction rollback error", mlog.Err(rollbackErr), mlog.String("methodName", "getBlocksWithSameID"))
+	_, _, err = OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*struct{}, error) {
+		blocks, err := s.getBlocksWithSameID(tx)
+		if err != nil {
+			return nil, fmt.Errorf("cannot get blocks with same ID: %w", err)
 		}
-		return fmt.Errorf("cannot get blocks with same ID: %w", err)
-	}
 
-	blocksByID := map[string][]model.Block{}
-	for _, block := range blocks {
-		blocksByID[block.ID] = append(blocksByID[block.ID], block)
-	}
+		blocksByID := map[string][]model.Block{}
+		for _, block := range blocks {
+			blocksByID[block.ID] = append(blocksByID[block.ID], block)
+		}
 
-	for _, blocks := range blocksByID {
-		for i, block := range blocks {
-			if i == 0 {
-				// do nothing for the first ID, only updating the others
-				continue
-			}
-
-			newID := utils.NewID(model.BlockType2IDType(block.Type))
-			if err := s.replaceBlockID(tx, block.ID, newID, block.WorkspaceID); err != nil {
-				if rollbackErr := tx.Rollback(); rollbackErr != nil {
-					s.logger.Error("Unique IDs transaction rollback error", mlog.Err(rollbackErr), mlog.String("methodName", "replaceBlockID"))
+		for _, blocks := range blocksByID {
+			for i, block := range blocks {
+				if i == 0 {
+					// do nothing for the first ID, only updating the others
+					continue
 				}
-				return fmt.Errorf("cannot replace blockID %s: %w", block.ID, err)
+
+				newID := utils.NewID(model.BlockType2IDType(block.Type))
+				if err := s.replaceBlockID(tx, block.ID, newID, block.WorkspaceID); err != nil {
+					return nil, fmt.Errorf("cannot replace blockID %s: %w", block.ID, err)
+				}
 			}
 		}
-	}
 
-	if err := s.setSystemSetting(tx, UniqueIDsMigrationKey, strconv.FormatBool(true)); err != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			s.logger.Error("Unique IDs transaction rollback error", mlog.Err(rollbackErr), mlog.String("methodName", "setSystemSetting"))
+		if err := s.setSystemSetting(tx, UniqueIDsMigrationKey, strconv.FormatBool(true)); err != nil {
+			return nil, fmt.Errorf("cannot mark migration as completed: %w", err)
 		}
-		return fmt.Errorf("cannot mark migration as completed: %w", err)
-	}
 
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("cannot commit unique IDs transaction: %w", err)
-	}
+		s.logger.Debug("Unique IDs migration finished successfully")
+		return nil, nil
+	})
 
-	s.logger.Debug("Unique IDs migration finished successfully")
-	return nil
+	return err
 }
 
 // runCategoryUUIDIDMigration takes care of deriving the categories
@@ -144,40 +131,25 @@ func (s *SQLStore) runCategoryUUIDIDMigration() error {
 
 	s.logger.Debug("Running category UUID ID migration")
 
-	tx, txErr := s.BeginImmTx(context.Background(), nil)
-	if txErr != nil {
-		return txErr
-	}
-
-	if s.isPlugin {
-		if err := s.createCategories(tx); err != nil {
-			if rollbackErr := tx.Rollback(); rollbackErr != nil {
-				s.logger.Error("category UUIDs insert categories transaction rollback error", mlog.Err(rollbackErr), mlog.String("methodName", "setSystemSetting"))
+	_, _, err = OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*struct{}, error) {
+		if s.isPlugin {
+			if err := s.createCategories(tx); err != nil {
+				return nil, err
 			}
-			return err
-		}
 
-		if err := s.createCategoryBoards(tx); err != nil {
-			if rollbackErr := tx.Rollback(); rollbackErr != nil {
-				s.logger.Error("category UUIDs insert category boards transaction rollback error", mlog.Err(rollbackErr), mlog.String("methodName", "setSystemSetting"))
+			if err := s.createCategoryBoards(tx); err != nil {
+				return nil, err
 			}
-			return err
 		}
-	}
 
-	if err := s.setSystemSetting(tx, CategoryUUIDIDMigrationKey, strconv.FormatBool(true)); err != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			s.logger.Error("category UUIDs transaction rollback error", mlog.Err(rollbackErr), mlog.String("methodName", "setSystemSetting"))
+		if err := s.setSystemSetting(tx, CategoryUUIDIDMigrationKey, strconv.FormatBool(true)); err != nil {
+			return nil, fmt.Errorf("cannot mark migration as completed: %w", err)
 		}
-		return fmt.Errorf("cannot mark migration as completed: %w", err)
-	}
 
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("cannot commit category UUIDs transaction: %w", err)
-	}
-
-	s.logger.Debug("category UUIDs migration finished successfully")
-	return nil
+		s.logger.Debug("category UUIDs migration finished successfully")
+		return nil, nil
+	})
+	return err
 }
 
 func (s *SQLStore) createCategories(db sq.BaseRunner) error {
@@ -374,54 +346,44 @@ func (s *SQLStore) migrateTeamLessBoards() error {
 	// duplicate queries for the same DM.
 	channelToTeamCache := map[string]string{}
 
-	tx, err := s.BeginImmTx(context.Background(), nil)
-	if err != nil {
-		s.logger.Error("error starting transaction in migrateTeamLessBoards", mlog.Err(err))
-		return err
-	}
+	_, _, err = OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*struct{}, error) {
+		for i := range boards {
+			// check the cache first
+			teamID, ok := channelToTeamCache[boards[i].ChannelID]
 
-	for i := range boards {
-		// check the cache first
-		teamID, ok := channelToTeamCache[boards[i].ChannelID]
+			// query DB if entry not found in cache
+			if !ok {
+				teamID, err = s.getBestTeamForBoard(s.db, boards[i])
+				if err != nil {
+					// don't let one board's error spoil
+					// the mood for others
+					continue
+				}
+			}
 
-		// query DB if entry not found in cache
-		if !ok {
-			teamID, err = s.getBestTeamForBoard(s.db, boards[i])
-			if err != nil {
-				// don't let one board's error spoil
-				// the mood for others
-				continue
+			channelToTeamCache[boards[i].ChannelID] = teamID
+			boards[i].TeamID = teamID
+
+			query := s.getQueryBuilder(tx).
+				Update(s.tablePrefix+"boards").
+				Set("team_id", teamID).
+				Set("type", model.BoardTypePrivate).
+				Where(sq.Eq{"id": boards[i].ID})
+
+			if _, err := query.Exec(); err != nil {
+				s.logger.Error("failed to set team id for board", mlog.String("board_id", boards[i].ID), mlog.String("team_id", teamID), mlog.Err(err))
+				return nil, err
 			}
 		}
 
-		channelToTeamCache[boards[i].ChannelID] = teamID
-		boards[i].TeamID = teamID
-
-		query := s.getQueryBuilder(tx).
-			Update(s.tablePrefix+"boards").
-			Set("team_id", teamID).
-			Set("type", model.BoardTypePrivate).
-			Where(sq.Eq{"id": boards[i].ID})
-
-		if _, err := query.Exec(); err != nil {
-			s.logger.Error("failed to set team id for board", mlog.String("board_id", boards[i].ID), mlog.String("team_id", teamID), mlog.Err(err))
-			return err
+		if err := s.setSystemSetting(tx, TeamLessBoardsMigrationKey, strconv.FormatBool(true)); err != nil {
+			return nil, fmt.Errorf("cannot mark migration as completed: %w", err)
 		}
-	}
 
-	if err := s.setSystemSetting(tx, TeamLessBoardsMigrationKey, strconv.FormatBool(true)); err != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			s.logger.Error("transaction rollback error", mlog.Err(rollbackErr), mlog.String("methodName", "migrateTeamLessBoards"))
-		}
-		return fmt.Errorf("cannot mark migration as completed: %w", err)
-	}
+		return nil, nil
+	})
 
-	if err := tx.Commit(); err != nil {
-		s.logger.Error("failed to commit migrateTeamLessBoards transaction", mlog.Err(err))
-		return err
-	}
-
-	return nil
+	return err
 }
 
 func (s *SQLStore) getDMBoards(tx sq.BaseRunner) ([]*model.Board, error) {
