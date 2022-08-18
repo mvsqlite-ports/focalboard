@@ -78,7 +78,7 @@ func (s *SQLStore) runUniqueIDsMigration() error {
 
 	s.logger.Debug("Running Unique IDs migration")
 
-	_, _, err = OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*struct{}, error) {
+	_, err = OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*struct{}, error) {
 		blocks, err := s.getBlocksWithSameID(tx)
 		if err != nil {
 			return nil, fmt.Errorf("cannot get blocks with same ID: %w", err)
@@ -131,7 +131,7 @@ func (s *SQLStore) runCategoryUUIDIDMigration() error {
 
 	s.logger.Debug("Running category UUID ID migration")
 
-	_, _, err = OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*struct{}, error) {
+	_, err = OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*struct{}, error) {
 		if s.isPlugin {
 			if err := s.createCategories(tx); err != nil {
 				return nil, err
@@ -346,7 +346,7 @@ func (s *SQLStore) migrateTeamLessBoards() error {
 	// duplicate queries for the same DM.
 	channelToTeamCache := map[string]string{}
 
-	_, _, err = OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*struct{}, error) {
+	_, err = OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*struct{}, error) {
 		for i := range boards {
 			// check the cache first
 			teamID, ok := channelToTeamCache[boards[i].ChannelID]

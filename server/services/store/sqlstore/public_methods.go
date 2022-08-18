@@ -36,7 +36,7 @@ func (s *SQLStore) CleanUpSessions(expireTime int64) error {
 }
 
 func (s *SQLStore) CreateBoardsAndBlocks(bab *model.BoardsAndBlocks, userID string) (*model.BoardsAndBlocks, error) {
-	result, _, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*model.BoardsAndBlocks, error) {
+	result, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*model.BoardsAndBlocks, error) {
 		result, err := s.createBoardsAndBlocks(tx, bab, userID)
 		if err != nil {
 			return nil, err
@@ -48,7 +48,7 @@ func (s *SQLStore) CreateBoardsAndBlocks(bab *model.BoardsAndBlocks, userID stri
 }
 
 func (s *SQLStore) CreateBoardsAndBlocksWithAdmin(bab *model.BoardsAndBlocks, userID string) (*model.BoardsAndBlocks, []*model.BoardMember, error) {
-	result, _, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*struct {
+	result, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*struct {
 		a *model.BoardsAndBlocks
 		b []*model.BoardMember
 	}, error) {
@@ -83,7 +83,7 @@ func (s *SQLStore) CreateSession(session *model.Session) error {
 }
 
 func (s *SQLStore) CreateSubscription(sub *model.Subscription) (*model.Subscription, error) {
-	result, _, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*model.Subscription, error) {
+	result, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*model.Subscription, error) {
 		return s.createSubscription(s.db, sub)
 	})
 	return result, err
@@ -169,7 +169,7 @@ func (s *SQLStore) DeleteSubscription(blockID string, subscriberID string) error
 }
 
 func (s *SQLStore) DuplicateBlock(boardID string, blockID string, userID string, asTemplate bool) ([]model.Block, error) {
-	result, _, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*[]model.Block, error) {
+	result, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*[]model.Block, error) {
 		result, err := s.duplicateBlock(tx, boardID, blockID, userID, asTemplate)
 		if err != nil {
 			return nil, err
@@ -182,7 +182,7 @@ func (s *SQLStore) DuplicateBlock(boardID string, blockID string, userID string,
 }
 
 func (s *SQLStore) DuplicateBoard(boardID string, userID string, toTeam string, asTemplate bool) (*model.BoardsAndBlocks, []*model.BoardMember, error) {
-	result, _, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*struct {
+	result, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*struct {
 		a *model.BoardsAndBlocks
 		b []*model.BoardMember
 	}, error) {
@@ -499,7 +499,7 @@ func (s *SQLStore) InsertBlocks(blocks []model.Block, userID string) error {
 }
 
 func (s *SQLStore) InsertBoard(board *model.Board, userID string) (*model.Board, error) {
-	result, _, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*model.Board, error) {
+	result, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*model.Board, error) {
 		return s.insertBoard(s.db, board, userID)
 	})
 	return result, err
@@ -507,7 +507,7 @@ func (s *SQLStore) InsertBoard(board *model.Board, userID string) (*model.Board,
 }
 
 func (s *SQLStore) InsertBoardWithAdmin(board *model.Board, userID string) (*model.Board, *model.BoardMember, error) {
-	result, _, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*struct {
+	result, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*struct {
 		a *model.Board
 		b *model.BoardMember
 	}, error) {
@@ -554,7 +554,7 @@ func (s *SQLStore) PatchBlocks(blockPatches *model.BlockPatchBatch, userID strin
 }
 
 func (s *SQLStore) PatchBoard(boardID string, boardPatch *model.BoardPatch, userID string) (*model.Board, error) {
-	result, _, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*model.Board, error) {
+	result, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*model.Board, error) {
 		result, err := s.patchBoard(tx, boardID, boardPatch, userID)
 		if err != nil {
 			return nil, err
@@ -566,7 +566,7 @@ func (s *SQLStore) PatchBoard(boardID string, boardPatch *model.BoardPatch, user
 }
 
 func (s *SQLStore) PatchBoardsAndBlocks(pbab *model.PatchBoardsAndBlocks, userID string) (*model.BoardsAndBlocks, error) {
-	result, _, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*model.BoardsAndBlocks, error) {
+	result, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*model.BoardsAndBlocks, error) {
 		result, err := s.patchBoardsAndBlocks(tx, pbab, userID)
 		if err != nil {
 			return nil, err
@@ -599,7 +599,7 @@ func (s *SQLStore) RemoveDefaultTemplates(boards []*model.Board) error {
 }
 
 func (s *SQLStore) RunDataRetention(globalRetentionDate int64, batchSize int64) (int64, error) {
-	result, _, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*int64, error) {
+	result, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*int64, error) {
 		result, err := s.runDataRetention(tx, globalRetentionDate, batchSize)
 		if err != nil {
 			return nil, err
@@ -621,7 +621,7 @@ func (s *SQLStore) SaveFileInfo(fileInfo *mmModel.FileInfo) error {
 }
 
 func (s *SQLStore) SaveMember(bm *model.BoardMember) (*model.BoardMember, error) {
-	result, _, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*model.BoardMember, error) {
+	result, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*model.BoardMember, error) {
 		return s.saveMember(s.db, bm)
 	})
 	return result, err
@@ -685,7 +685,7 @@ func (s *SQLStore) UndeleteBoard(boardID string, modifiedBy string) error {
 }
 
 func (s *SQLStore) UpdateCardLimitTimestamp(cardLimit int) (int64, error) {
-	result, _, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*int64, error) {
+	result, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*int64, error) {
 		result, err := s.updateCardLimitTimestamp(s.db, cardLimit)
 		if err != nil {
 			return nil, err
@@ -743,7 +743,7 @@ func (s *SQLStore) UpdateUserPasswordByID(userID string, password string) error 
 }
 
 func (s *SQLStore) UpsertNotificationHint(hint *model.NotificationHint, notificationFreq time.Duration) (*model.NotificationHint, error) {
-	result, _, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*model.NotificationHint, error) {
+	result, err := OptimisticRetryableImmTx(s, context.Background(), func(tx *sql.Tx) (*model.NotificationHint, error) {
 		return s.upsertNotificationHint(s.db, hint, notificationFreq)
 	})
 	return result, err
