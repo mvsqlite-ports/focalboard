@@ -9,7 +9,7 @@ RUN npm install --no-optional && \
 
 ### mvsqlite
 FROM curlimages/curl:latest as mvsqlite
-RUN curl -L -o /tmp/libmvsqlite_preload.so https://github.com/losfair/mvsqlite/releases/download/v0.1.12/libmvsqlite_preload.so
+RUN curl -L -o /tmp/libmvsqlite_preload.so https://github.com/losfair/mvsqlite/releases/download/v0.1.12-2/libmvsqlite_preload.so
 
 ### Go build
 FROM golang:1.18.5-bullseye AS gobuild
