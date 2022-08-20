@@ -214,6 +214,16 @@ func NewStore(config *config.Configuration, isSingleUser bool, logger mlog.Logge
 		return nil, err
 	}
 
+	if config.DBMaxIdleConns != nil {
+		logger.Info("DBMaxIdleConns", mlog.Int("limit", *config.DBMaxIdleConns))
+		sqlDB.SetMaxIdleConns(*config.DBMaxIdleConns)
+	}
+
+	if config.DBMaxOpenConns != nil {
+		logger.Info("DBMaxOpenConns", mlog.Int("limit", *config.DBMaxOpenConns))
+		sqlDB.SetMaxOpenConns(*config.DBMaxOpenConns)
+	}
+
 	err = sqlDB.Ping()
 	if err != nil {
 		logger.Error(`Database Ping failed`, mlog.Err(err))
